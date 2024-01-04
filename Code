@@ -1,1 +1,110 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jan  2 14:52:56 2024
+
+@author: Andrew
+"""
+#issues to reslove, units Test 5
+from paddleocr import PaddleOCR,draw_ocr,PPStructure,draw_structure_result,save_structure_res
+import cv2 as cv
+import pandas as pd
+import numpy as np
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment
+
+table_engine = PPStructure(recovery=True, return_ocr_result_in_table=True,lang = 'en')
+img = cv.imread('Test10.png')
+result = table_engine(img)
+
+text = []
+for element in result:
+    if element['type']=='table':
+        html_table = element['res']['html']
+        html_data = pd.read_html(html_table)
+        df = pd.DataFrame(html_data[0])
+    else:
+        text.append(element['res'][0]['text'])
+
+#removing headers to remove a space between headers and table body        
+dfnew = df.columns.to_frame().T.append(df,ignore_index=True)
+dfnew.to_excel('Test1.xlsx',sheet_name='Test',engine = 'xlsxwriter',header = None)
+
+wb = load_workbook('Test1.xlsx',data_only=True)
+ws = wb.worksheets[0]
+
+#remove indexing and header rows
+ws.delete_cols(1)
+cell = ws.cell(1,1)
+if cell.value == None:
+    ws.delete_rows(1)
+    
+#adding Title
+for textLine in text[::-1]:
+    ws.insert_rows(1)
+    cell = ws.cell(row=1,column=1)
+    cell.value = textLine
+    ws.merge_cells(start_row=1,start_column=1,end_row=1,end_column=ws.max_column)
+    cell.alignment = Alignment(horizontal = 'center')
+
+
+#merging Dupe column cells
+lastHeader = 'ajisdhuohrefuynfeuwco'
+counter = 0
+for row in range(len(text)+1,len(dfnew.index)-len(df.index)+1+len(text)):
+    for col in range(1,ws.max_column+1):
+        cell = ws.cell(row=row,column=col)
+        if lastHeader == cell.value:
+            if counter<1:
+                ws.merge_cells(start_row=row, start_column = col-1, end_row = row, end_column=col)
+                cell=ws.cell(row = row, column=col-1-counter)
+                cell.alignment = Alignment(horizontal = 'center')
+                counter = counter+1
+            else:
+                ws.unmerge_cells(start_row=row, start_column=col-1-counter,end_row = row, end_column = col-1)
+                ws.merge_cells(start_row=row, start_column = col-1-counter, end_row = row, end_column=col)
+                cell=ws.cell(row = row, column=col-1-counter)
+                counter = counter+1
+                cell.alignment = Alignment(horizontal = 'center')
+        else:
+            counter = 0
+        print(cell.value)
+        print(str(row) + ' c: ' + str(col))
+        lastHeader = cell.value
+
+#merging dupe row cells,  can't do 2x2 dupe but I didn't find any 2x2 dupe rows
+lastHeader = 'ajisdhuohrefuynfeuwco'
+counter = 0
+for col in range(1,ws.max_column+1):
+    for row in range(len(text)+1,len(dfnew.index)-len(df.index)+1+len(text)):
+        cell = ws.cell(row=row,column=col)
+        if lastHeader == cell.value:
+            if counter<1:
+                ws.merge_cells(start_row=row-1, start_column = col, end_row = row, end_column=col)
+                cell=ws.cell(row = row-1, column=col)
+                cell.alignment = Alignment(horizontal = 'center',vertical= 'center')
+                counter = counter+1
+            else:
+                ws.unmerge_cells(start_row=row-1-counter, start_column=col,end_row = row-1, end_column = col)
+                ws.merge_cells(start_row=row-1-counter, start_column = col, end_row = row, end_column=col)
+                cell=ws.cell(row = row-1-counter, column=col)
+                counter = counter+1
+                cell.alignment = Alignment(horizontal = 'center',vertical= 'center')
+        else:
+            counter = 0
+        lastHeader = cell.value
+
+
+for col in range(1,ws.max_column+1):
+    for row in range(1,ws.max_row):
+        cell = ws.cell(row = row, column = col)
+        if type(cell.value)==str:
+            if cell.value.find('Unnamed')!=-1:
+                cell.value=None
+
+
+    
+    
+wb.save('Test1Mod.xlsx')
+
+
 
